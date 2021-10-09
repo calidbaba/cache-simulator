@@ -168,10 +168,8 @@ void main(int argc, char** argv)
 
     //egne greier
     cache_entries = cache_size/memory_size;
-    printf("mem%d cache_size%d\n", memory_size, cache_size);
     cache_size_bits = log2(cache_entries);
     cache_pos_bits = log2(block_size);
-    printf("acces adfress  entries %d\n", cache_entries);
     
     /* Loop until whole trace file has been read */
     mem_access_t access;
@@ -184,21 +182,19 @@ void main(int argc, char** argv)
             if (access.address == 0)
                 break;
             int tag = access.address >> cache_pos_bits + cache_size_bits;
-            int pos = access.address %power2(cache_pos_bits + cache_pos_bits) >> cache_size_bits;
-            printf("acces adfress %d entries %d\n", access.address, cache_entries);
-            int place = access.address%cache_entries;
-            printf("successhfhdjfs\n");
+            int pos = access.address %block_size;
+            int place = access.address%power2(cache_pos_bits+cache_size_bits) >> cache_pos_bits;
             cache_statistics.accesses += 1;
-            if (instans[access.address % cache_entries].tag == tag && instans[place].valid == 1){
+            if (instans[place].tag == tag && instans[place].valid == 1){
                 if (instans[place].pos[pos] ==1){
                     printf("this memory adress is used %x\n", access.address);
                     cache_statistics.hits += 1;
                     continue;
                 }
             }
-            instans[access.address % cache_entries].tag = tag;
-            instans[access.address % cache_entries].valid = 1;
-            instans[access.address % cache_entries].pos[pos] = 1;
+            instans[place].tag = tag;
+            instans[place].valid = 1;
+            instans[place].pos[pos] = 1;
             /* printf("%d %x\n",access.accesstype, access.address); */
 
             /* Do a cache access */
