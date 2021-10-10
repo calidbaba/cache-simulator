@@ -66,17 +66,24 @@ mem_access_t read_transaction(FILE *ptr_file) {
 
         /* Get the access type */
         token = strsep(&string, " \n");        
-        if (strcmp(token,"I") == 0) {
+        if(cache_org ==sc){
+            printf("her kommer string %s\n", string);
+            if (strcmp(token,"I") == 0) {
+                access.accesstype = instruction;
+            } else if (strcmp(token,"D") == 0) {
+                access.accesstype = data;
+            } else {
+                printf("Unkown access type\n");
+                exit(0);
+            }
+        }
+        //if cache_org is unified just set every instruction to the same cache
+        else {
             access.accesstype = instruction;
-        } else if (strcmp(token,"D") == 0) {
-            access.accesstype = data;
-        } else {
-            printf("Unkown access type\n");
-            exit(0);
         }
         
-        /* Get the access type */        
         token = strsep(&string, " \n");
+        printf("her kommer token2 %s\n", token);
         access.address = (uint32_t)strtol(token, NULL, 16);
 
         return access;
@@ -135,7 +142,10 @@ void main(int argc, char** argv)
             printf("cache size has to be in range 128-4096\n");
             exit(0);
         }
-        
+        //if cache organization is split in 2 split cache size between them
+        if(cache_org == sc){
+            cache_size = cache_size/2;
+        }
         /* Set Cache Mapping */
         if (strcmp(argv[2], "dm") == 0) {
             cache_mapping = dm;
@@ -167,7 +177,7 @@ void main(int argc, char** argv)
     }
 
     //egne greier
-    cache_entries = cache_size/memory_size;
+    cache_entries = cache_size/block_size;
     cache_size_bits = log2(cache_entries);
     cache_pos_bits = log2(block_size);
     
@@ -175,26 +185,47 @@ void main(int argc, char** argv)
     mem_access_t access;
     if (cache_mapping == dm){
         struct cache instans[cache_entries];
-        printf("success\n");
+        struct cache instans2[cache_entries * cache_org];
+        // set the memory in instan to 0 
+        memset(&instans, 0, sizeof(instans));
+        memset(&instans2, 0, sizeof(instans2));
+
         while(1) {
             access = read_transaction(ptr_file);
             //If no transactions left, break out of loop
+            printf("run\n");
             if (access.address == 0)
                 break;
             int tag = access.address >> cache_pos_bits + cache_size_bits;
             int pos = access.address %block_size;
             int place = access.address%power2(cache_pos_bits+cache_size_bits) >> cache_pos_bits;
             cache_statistics.accesses += 1;
-            if (instans[place].tag == tag && instans[place].valid == 1){
-                if (instans[place].pos[pos] ==1){
-                    printf("this memory adress is used %x\n", access.address);
-                    cache_statistics.hits += 1;
-                    continue;
+            if (access.accesstype == instruction){
+                puts("runrun222");
+                if (instans[place].tag == tag && instans[place].valid == 1){
+                    if (instans[place].pos[pos] ==1){
+                        /* printf("this memory adress is used %x\n", access.address); */
+                        cache_statistics.hits += 1;
+                        continue;
+                    }
                 }
+                instans[place].tag = tag;
+                instans[place].valid = 1;
+                instans[place].pos[pos] = 1;
             }
-            instans[place].tag = tag;
-            instans[place].valid = 1;
-            instans[place].pos[pos] = 1;
+            else{
+                puts("runrun");
+                if (instans2[place].tag == tag && instans2[place].valid == 1){
+                    if (instans2[place].pos[pos] ==1){
+                        /* printf("this memory adress is used %x\n", access.address); */
+                        cache_statistics.hits += 1;
+                        continue;
+                    }
+                }
+                instans2[place].tag = tag;
+                instans2[place].valid = 1;
+                instans2[place].pos[pos] = 1;
+            }
             /* printf("%d %x\n",access.accesstype, access.address); */
 
             /* Do a cache access */
