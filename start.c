@@ -7,8 +7,6 @@
 #include <math.h>
 #include <sys/types.h>
 
-#define BLOCK_SIZE 64
-
 typedef enum {dm, fa} cache_map_t;
 typedef enum {uc, sc} cache_org_t;
 typedef enum {instruction, data} access_t;
@@ -21,18 +19,9 @@ typedef struct {
 typedef struct {
     uint64_t accesses;
     uint64_t hits;
-    // You can declare additional statistics if
-    // you like, however you are now allowed to
-    // remove the accesses or hits
 } cache_stat_t;
 
-/* typedef struct { */
-/*     u_int16_t head; */
-/*     u_int16_t tail; */
-/*     u_int8_t [cache_size]; */
-/* } que; */
 
-// DECLARE CACHES AND COUNTERS FOR THE STATS HERE
 
 
 uint32_t cache_size; 
@@ -42,10 +31,10 @@ cache_map_t cache_mapping;
 cache_org_t cache_org;
 
 //egne greier
-struct cache {
+typedef struct {
     uint32_t tag;
     u_int8_t valid;
-};
+}cache;
 // USE THIS FOR YOUR CACHE STATISTICS
 cache_stat_t cache_statistics;
 
@@ -91,7 +80,7 @@ mem_access_t read_transaction(FILE *ptr_file) {
     access.address = 0;
     return access;
 }
-
+//checks if a double is an int
 uint32_t isInteger(double number){
     double temp;
 
@@ -104,6 +93,7 @@ uint32_t isInteger(double number){
         return 1;
     }
 }
+//takes in an exponent an uses it as a power of 2
 uint32_t power2(uint32_t exponent){
     return 1 << exponent;
 }
@@ -180,20 +170,22 @@ void main(int argc, char** argv)
     
     /* Loop until whole trace file has been read */
     mem_access_t access;
-    struct cache instans[cache_entries];
+    cache instans[cache_entries];
     //if organization is unified set instans2 to size 0
-    struct cache instans2[cache_entries * cache_org];
+    cache instans2[cache_entries * cache_org];
     // set the memory in instans to 0 
     memset(&instans, 0, sizeof(instans));
     memset(&instans2, 0, sizeof(instans2));
     if (cache_mapping == dm){
-
+        uint32_t tag;
+        //index of cache block
+        uint32_t place;
         while(1) {
             access = read_transaction(ptr_file);
             if (access.address == 0)
                 break;
-            uint64_t tag = access.address >> (cache_pos_bits + cache_size_bits);
-            uint64_t place = access.address%power2(cache_pos_bits+cache_size_bits) >> cache_pos_bits;
+            tag = access.address >> (cache_pos_bits + cache_size_bits);
+            place = access.address%power2(cache_pos_bits+cache_size_bits) >> cache_pos_bits;
             cache_statistics.accesses += 1;
             if (access.accesstype == instruction){
                 if (instans[place].tag == tag && instans[place].valid == 1){
@@ -240,7 +232,9 @@ void main(int argc, char** argv)
             tag = access.address >> cache_pos_bits;
             hit = 0;
             cache_statistics.accesses += 1;
+            //check for type of instruction, in case of a unified cache all instructions will be set to the type instruction
             if (access.accesstype == instruction){
+                //search the cache for a hit
                 for (int i=0; i<cache_entries; i++){
                     if (instans[i].tag == tag && instans[i].valid == 1){
                         cache_statistics.hits += 1;
@@ -252,7 +246,7 @@ void main(int argc, char** argv)
                     continue;
                 }
                 hit = 0;
-                //if no hit is found, search for available space
+                // if no hits where made, search for a open space in the cache
                 for (int i=0; i<cache_entries; i++){
                     if (instans[i].valid == 0){
                         que[head] = i;
@@ -266,6 +260,7 @@ void main(int argc, char** argv)
                 if(hit == 1){
                     continue;
                 }
+                //if cache is full, replace the tail of the que 
                 instans[que[tail]].tag = tag;
                 instans[que[tail]].valid = 1;
                 que[head] = que[tail];
@@ -299,7 +294,7 @@ void main(int argc, char** argv)
                 if(hit == 1){
                     continue;
                 }
-                //if cache is full, use the tail2 of the que2
+                //if cache is full, replace the tail of the que 
                 instans2[que2[tail2]].tag = tag;
                 instans2[que2[tail2]].valid = 1;
                 que2[head2] = que2[tail2];
