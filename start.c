@@ -21,7 +21,6 @@ typedef struct {
 typedef struct {
     uint64_t accesses;
     uint64_t hits;
-    uint64_t evicts;
     // You can declare additional statistics if
     // you like, however you are now allowed to
     // remove the accesses or hits
@@ -45,14 +44,7 @@ cache_org_t cache_org;
 //egne greier
 struct cache {
     uint32_t tag;
-    int valid;
-    int pos[BLOCK_SIZE];
-    int lastPos;
-};
-struct fa_cache {
-    uint32_t tag;
     u_int8_t valid;
-    int pos[BLOCK_SIZE];
 };
 // USE THIS FOR YOUR CACHE STATISTICS
 cache_stat_t cache_statistics;
@@ -100,7 +92,7 @@ mem_access_t read_transaction(FILE *ptr_file) {
     return access;
 }
 
-int isInteger(double number){
+uint32_t isInteger(double number){
     double temp;
 
     temp = number - (int) number;
@@ -112,7 +104,7 @@ int isInteger(double number){
         return 1;
     }
 }
-int power2(uint32_t exponent){
+uint32_t power2(uint32_t exponent){
     return 1 << exponent;
 }
 void main(int argc, char** argv)
@@ -167,7 +159,6 @@ void main(int argc, char** argv)
             exit(0);
         }
         if(cache_org == sc){
-            printf("sc\n");
             cache_size = cache_size/2;
         }
     }
@@ -183,190 +174,148 @@ void main(int argc, char** argv)
 
     //egne greier
     cache_entries = cache_size/block_size;
+
     cache_size_bits = log2(cache_entries);
     cache_pos_bits = log2(block_size);
     
     /* Loop until whole trace file has been read */
     mem_access_t access;
+    struct cache instans[cache_entries];
+    //if organization is unified set instans2 to size 0
+    struct cache instans2[cache_entries * cache_org];
+    // set the memory in instans to 0 
+    memset(&instans, 0, sizeof(instans));
+    memset(&instans2, 0, sizeof(instans2));
     if (cache_mapping == dm){
-        struct cache instans[cache_entries];
-        struct cache instans2[cache_entries * cache_org];
-        // set the memory in instan to 0 
-        memset(&instans, 0, sizeof(instans));
-        /* memset(&instans2, 0, sizeof(instans2)); */
-        printf("bloack ofsett = %d\n", cache_pos_bits);
-        printf("tag ofsett = %d\n", (32 -cache_pos_bits) - cache_size_bits);
-        printf("index ofsett = %d\n", cache_size_bits);
-        printf("cache size = %d\n", cache_size);
-        printf("bloack entries = %d\n", cache_entries);
 
         while(1) {
             access = read_transaction(ptr_file);
-            //If no transactions left, break out of loop
-            /* printf("run\n"); */
             if (access.address == 0)
                 break;
             uint64_t tag = access.address >> (cache_pos_bits + cache_size_bits);
-            uint64_t pos = access.address %block_size;
             uint64_t place = access.address%power2(cache_pos_bits+cache_size_bits) >> cache_pos_bits;
-            printf("tag %d\n", tag);
-            printf("place %d\n", place);
-            printf("pos/block %d\n", pos);
             cache_statistics.accesses += 1;
             if (access.accesstype == instruction){
-                /* puts("runrun222"); */
                 if (instans[place].tag == tag && instans[place].valid == 1){
-                    if (instans[place].pos[pos] == 1){
-                        /* printf("this memory adress is used %x\n", access.address); */
                         cache_statistics.hits += 1;
                         continue;
-                    }
-                }
-                else if(instans[place].valid == 1 && instans[place].pos[pos] == 1){
-                    instans[place].tag = tag;
-                    instans[place].valid = 1;
-                    instans[place].pos[pos] = 1;
-                    cache_statistics.evicts += 1;
-                    continue;
-
+                    /* } */
                 }
                 instans[place].tag = tag;
                 instans[place].valid = 1;
-                instans[place].pos[pos] = 1;
                 continue;
             }
             else{
-                puts("runrun");
                 if (instans2[place].tag == tag && instans2[place].valid == 1){
-                    if (instans2[place].pos[pos] == 1){
-                        /* printf("this memory adress is used %x\n", access.address); */
-                        cache_statistics.hits += 1;
-                        continue;
-                    }
+                    cache_statistics.hits += 1;
+                    continue;
                 }
                 instans2[place].tag = tag;
                 instans2[place].valid = 1;
-                instans2[place].pos[pos] = 1;
             }
         }
     }
     else{
         u_int16_t head;
         u_int16_t tail;
-        u_int8_t que[cache_size];
-        struct cache instans[cache_entries];
-        struct cache instans2[cache_entries * cache_org];
-        memset(&instans, 0, sizeof(instans));
-        memset(&instans2, 0, sizeof(instans2));
+        u_int8_t que[cache_entries];
+        u_int16_t head2;
+        u_int16_t tail2;
+        u_int8_t que2[cache_entries];
+        uint32_t tag;
+        u_int8_t hit;
 
         head = 0;
         tail = 0;
+        head2 = 0;
+        tail2 = 0;
         memset(&que, 0, sizeof(que));
+        memset(&que2, 0, sizeof(que2));
 
-        /* struct cache fa_cache_instans[cache_entries]; */
-        /* memset(&fa_cache_instans, 0, sizeof(fa_cache_instans)); */
-        /* printf("elser den?\n"); */
-        while(1) {
+           while(1) {
             access = read_transaction(ptr_file);
             //If no transactions left, break out of loop
             if (access.address == 0)
                 break;
-            // adress - pos
-            int tag = access.address >> cache_pos_bits;
-            uint8_t pos = access.address % power2(cache_pos_bits);
-            uint8_t hit = 0;
+            tag = access.address >> cache_pos_bits;
+            hit = 0;
             cache_statistics.accesses += 1;
             if (access.accesstype == instruction){
                 for (int i=0; i<cache_entries; i++){
-                    if (instans[i].tag == tag && instans[i].valid == 1 && instans[i].pos[pos] == 1){
-                        /* printf("this memory adress is used %x\n", access.address); */
+                    if (instans[i].tag == tag && instans[i].valid == 1){
                         cache_statistics.hits += 1;
-                        que[head] = i;
-                        head = (head +1)%cache_size;
                         hit = 1;
                         break;
                     }
                 }
-                if(hit){
+                if(hit == 1){
                     continue;
                 }
                 hit = 0;
+                //if no hit is found, search for available space
                 for (int i=0; i<cache_entries; i++){
                     if (instans[i].valid == 0){
-                        /* printf("this memory adress is not used and are now placed inn %d %x\n",i, access.address); */
                         que[head] = i;
-                        head = (head +1)%cache_size;
+                        head = (head +1)%cache_entries;
                         instans[i].tag = tag;
                         instans[i].valid = 1;
-                        instans[i].pos[pos] = 1;
                         hit = 1;
                         break;
                     }
                 }
-                if(hit){
+                if(hit == 1){
                     continue;
                 }
                 instans[que[tail]].tag = tag;
                 instans[que[tail]].valid = 1;
-                instans[que[tail]].pos[pos] = 1;
-                tail = (tail + 1) % cache_size;
+                que[head] = que[tail];
+                head = (head +1)%cache_entries;
+                tail = (tail + 1) % cache_entries;
             }
             else{
+                //search the cache for a hit
                 for (int i=0; i<cache_entries; i++){
-                    if (instans2[i].tag == tag && instans2[i].valid == 1 && instans2[i].pos[pos] == 1){
-                        /* printf("this memory adress is used %x\n", access.address); */
+                    if (instans2[i].tag == tag && instans2[i].valid == 1){
                         cache_statistics.hits += 1;
-                        que[head] = i;
-                        head = (head +1)%cache_size;
                         hit = 1;
                         break;
                     }
                 }
-                if(hit){
+                if(hit == 1){
                     continue;
                 }
                 hit = 0;
+                // if no hits where made, search for a open space in the cache
                 for (int i=0; i<cache_entries; i++){
                     if (instans2[i].valid == 0){
-                        /* printf("this memory adress is not used and are now placed inn %d %x\n",i, access.address); */
-                        que[head] = i;
-                        head = (head +1)%cache_size;
+                        que2[head2] = i;
+                        head2 = (head2 +1)%cache_entries;
                         instans2[i].tag = tag;
                         instans2[i].valid = 1;
-                        instans2[i].pos[pos] = 1;
                         hit = 1;
                         break;
                     }
                 }
-                if(hit){
+                if(hit == 1){
                     continue;
                 }
-                instans2[que[tail]].tag = tag;
-                instans2[que[tail]].valid = 1;
-                instans2[que[tail]].pos[pos] = 1;
-                tail = (tail + 1) % cache_size;
-
+                //if cache is full, use the tail2 of the que2
+                instans2[que2[tail2]].tag = tag;
+                instans2[que2[tail2]].valid = 1;
+                que2[head2] = que2[tail2];
+                head2 = (head2 +1)%cache_entries;
+                tail2 = (tail2 + 1) % cache_entries;
             }
         }
     }
-    /* for (int i=0; i<32; i++){ */
-    /*     printf("valid ? = %d\n", instans[i].valid); */
-    /*     printf("tag ? = %d\n", instans[i].tag); */
-    /*     /1* printf("pos ? = %d\n", instans[i].tag); *1/ */
-    /*     printf("address ? = %d\n", instans[i].memory); */
-    /* } */
-    /* Print the statistics */
     // DO NOT CHANGE THE FOLLOWING LINES!
     printf("\nCache Statistics\n");
     printf("-----------------\n\n");
     printf("Accesses: %ld\n", cache_statistics.accesses);
     printf("Hits:     %ld\n", cache_statistics.hits);
-    printf("Evicts:   %ld\n", cache_statistics.evicts);
     printf("Hit Rate: %.4f\n", (double) cache_statistics.hits / cache_statistics.accesses);
     // You can extend the memory statistic printing if you like!
 
     /* Close the trace file */
     fclose(ptr_file);
-    printf("heihei\n");
-
 }
